@@ -1,1 +1,2 @@
-from .querysetdataframe import QuerysetDataFrame
+from .querysetdataframe import QDataFrame
+
