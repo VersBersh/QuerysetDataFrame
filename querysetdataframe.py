@@ -64,7 +64,10 @@ class _QDataFrameMeta(type):
         for name, member in getmembers(cls):
             if name in ('loc', 'iloc', 'at', 'iat', 'ix'): 
                 setattr(cls, name, _QIndexer(member))
-            elif ismethod(member) and not (name.startswith('_') or name.startswith('to')):
+            elif ismethod(member) and not (
+                    name.startswith('_') or 
+                    name.startswith('to') or
+                    name in ('set_index', 'reindex')):
                 setattr(cls, name, _QMethod(member))
         return cls
 
