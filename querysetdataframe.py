@@ -49,7 +49,7 @@ class _QIndexer(object):
         
     def __get__(self, instance, owner):
         prop = self.descriptor.__get__(instance, owner)
-        if hasattr(prop, '_qs'):
+        if hasattr(instance, '_qs'):
             prop._getitem_axis = self.new_getitem_axis(prop._getitem_axis, instance._qs)
         return prop
     
