@@ -98,7 +98,7 @@ class QDataFrame(pd.DataFrame):
             if (not values) or len(values) == 0:
                 super(QDataFrame, self).__init__(list(queryset.values()))
             else:
-                super(QDataFrame, self).__init__(list(queryset.values(*values)))                     
+                super(QDataFrame, self).__init__(list(queryset.values_list(*values)))                     
 
             if queryset:
                 self.set_index('id', inplace=True) 
