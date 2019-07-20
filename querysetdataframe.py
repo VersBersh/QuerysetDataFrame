@@ -13,10 +13,12 @@ class _QMethod(object):
     """
     def __init__(self, func):
         self.func = func
+        self.instance = None
         functools.update_wrapper(self, func)
         
-    def __get__(self, instance, owner):          
-        return functools.partial(self.__call__, instance)
+    def __get__(self, instance, owner):  
+        self.instance = instance        
+        return self
     
     def __call__(self, *args, **kwargs):
         ret = self.func(self.instance, *args, **kwargs)
