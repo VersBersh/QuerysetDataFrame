@@ -49,7 +49,7 @@ def new_column2(inst):
 
 ```bash
 git clone https://github.com/VersBersh/QuerysetDataFrame.git
-python setup.py install
+pip install .
 ```
 
 # TO DO

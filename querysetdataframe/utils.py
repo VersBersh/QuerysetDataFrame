@@ -1,5 +1,5 @@
 import logging
-from .querysetdataframe import QDataFrame
+from .qdataframe import QDataFrame
 
 log = logging.getLogger(__name__)
 

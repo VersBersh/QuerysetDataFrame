@@ -1,2 +1,4 @@
 *.py[cod]
 *.egg*
+.vscode/*
+/querysetdataframe/__pychace__/
