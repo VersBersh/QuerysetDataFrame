@@ -1,7 +1,8 @@
 # QDataFrame
-A pandas DataFrame constructed from a queryset.
+A pandas DataFrame constructed from a queryset. Useful when working in the django shell or jupyter, but not suitable for production.
 
-For instance, if you have a django model, `MyModel`, then you can quickly convert it to a dataframe with
+# Examples
+If you have a django model, `MyModel`, then you can quickly convert it to a dataframe with
 
 ```df = QDataFrame(MyModel.objects.all())```
 
@@ -30,6 +31,25 @@ def new_columns(inst):
     }
     
 df.add_col(new_columns)
+```
+
+Use can use the `column` decorator to add columns as you define them
+
+```python
+from querysetdataframe import column
+
+@column(df)
+def new_column2(inst):
+    return inst.some_forein_key.some_property
+```
+
+# Installation
+
+`cd` into a temp folder and run
+
+```bash
+git clone https://github.com/VersBersh/QuerysetDataFrame.git
+python setup.py install
 ```
 
 # TO DO
