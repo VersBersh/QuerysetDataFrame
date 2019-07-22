@@ -115,9 +115,9 @@ class QDataFrame(pd.DataFrame):
 
     def _calc(self, func):
         try:
-            # fast method: if properties of instance accessed
-            # in func are already columns of df then no need
-            # to query the database
+            # fast method: if properties of instance that are
+            # accessed in func are already columns of df then 
+            # there's no need to query the database
             return self.apply(func, axis=1)
         except:
             try:
@@ -132,7 +132,7 @@ class QDataFrame(pd.DataFrame):
     def add_col(self, func):
         if not self.empty:
             res = self._calc(func)
-            if isinstance(res[0], dict):
+            if isinstance(res, list) and isinstance(res[0], dict):
                 df = pd.DataFrame(res, index=self.index)
                 self[df.columns] = df
             else:
