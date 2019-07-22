@@ -69,7 +69,7 @@ class _QDataFrameMeta(type):
             elif ismethod(member) and not (
                     name.startswith('_') or 
                     name.startswith('to') or
-                    name in ('set_index', 'reindex')):
+                    name in ('set_index', 'reindex', 'add_col')):
                 setattr(cls, name, _QMethod(member))
         return cls
 
@@ -99,7 +99,7 @@ class QDataFrame(pd.DataFrame):
             super(QDataFrame, self).__init__(*args, **kwargs)
         else:
             self._internal_names_set.add('_qs')
-            self._qs = queryset    
+            self._qs = {inst.id: inst for inst in queryset}
             values = kwargs.get('values', None)
             if (not values) or len(values) == 0:
                 super(QDataFrame, self).__init__(list(queryset.values()))
@@ -115,9 +115,19 @@ class QDataFrame(pd.DataFrame):
 
     def _calc(self, func):
         try:
+            # fast method: if properties of instance accessed
+            # in func are already columns of df then no need
+            # to query the database
             return self.apply(func, axis=1)
         except:
-            return [func(self._qs.get(id=id_)) for id_ in self.index]
+            try:
+                instances = [self._qs.get(id_) for id_ in self.index]
+            except KeyError as err:
+                raise IndexError(
+                    'id {} does not exist in the queryset. Have you '
+                    'changed the index of the dataframe?'.format(err.args[0])
+                )
+            return [func(inst) for inst in instances]
 
     def add_col(self, func):
         if not self.empty:
