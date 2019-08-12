@@ -47,11 +47,12 @@ class _QIndexer(object):
                 ret.__class__ = QDataFrame
                 ret._qs = queryset
             return ret
+        inner._wrapped = True
         return inner
         
     def __get__(self, instance, owner):
         prop = self.descriptor.__get__(instance, owner)
-        if hasattr(instance, '_qs'):
+        if hasattr(instance, '_qs') and not hasattr(prop._getitem_axis, '_wrapped'):
             prop._getitem_axis = self.new_getitem_axis(prop._getitem_axis, instance._qs)
         return prop
     
