@@ -10,7 +10,7 @@ Initializing
 If you have a django model, `MyModel`, then you can quickly convert it to a dataframe with:
 
 ```python
-from utilities.querysetdataframe import QDataFrame
+from querysetdataframe import QDataFrame
 
 df = QDataFrame(MyModel.objects.all())
 ```
@@ -24,7 +24,7 @@ df = QDataFrame(MyModel.objects.all(), values=["field1", "field2", "fkey__field2
 you can also specify properties or methods on the model by using `Prop()` and `Meth()`
 
 ```python
-from utilities.querysetdataframe import Prop, Meth
+from querysetdataframe import Prop, Meth
 
 df = QDataFrame(
     MyModel.objects.all(),
