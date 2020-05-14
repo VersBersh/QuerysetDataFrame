@@ -1,15 +1,17 @@
 import functools
 import inspect
+import itertools
 from operator import attrgetter
-from typing import Sequence, Callable
+from typing import Callable, Optional, Sequence
 
 from django.db.models import QuerySet
+from django.db.models.fields import AutoField
 import pandas as pd
 from pandas.core.indexing import (
     _IXIndexer, _iLocIndexer, _LocIndexer, _iAtIndexer, _AtIndexer
 )
 
-from .attributetypes import Meth, Prop
+from .attributetypes import Field, Meth, Prop
 
 
 def cast_if_dataframe(df: pd.DataFrame, caller: "QDataFrame") -> "QDataFrame":
@@ -19,9 +21,10 @@ def cast_if_dataframe(df: pd.DataFrame, caller: "QDataFrame") -> "QDataFrame":
         df.__class__ = QDataFrame
         try:
             df._qs = caller._qs
-        except KeyError:
+        except AttributeError:
             pass
 
+    # noinspection PyTypeChecker
     return df
 
 
@@ -30,7 +33,6 @@ def qmethod(func: Callable) -> Callable:
 
     @functools.wraps(func)
     def wrapper(self, *args, **kwargs):
-        print(args, kwargs)
         ret = func(self, *args, **kwargs)
         return cast_if_dataframe(ret, self)
 
@@ -76,22 +78,36 @@ class QDataFrameMeta(type):
 class QDataFrame(pd.DataFrame, metaclass=QDataFrameMeta):
     """ a dataframe that can be constructed from a queryset """
 
-    def __new__(cls, queryset: QuerySet = None, values: list = None, *args, **kwargs):
-        if (queryset is None) or not isinstance(queryset, QuerySet):
-            return super().__new__(cls, *args, **kwargs)
+    def __new__(cls,
+                queryset: Optional[QuerySet] = None,
+                values: Optional[list] = None,
+                *args, **kwargs):
 
-        if values is None and len(args) == 2:
-            values = args[1]
+        if (queryset is None) or not isinstance(queryset, QuerySet):
+            return super().__new__(cls)
+
         if values is None:
+            # default to all concrete fields on the model
             props = ()
             meths = ()
-            fields = ("pk", *map(attrgetter("name"), queryset.model._meta.fields))
+            cfields = ()
+            sfields = ("pk",)  # always include the pk for the DataFrame index
+            sfields += tuple(f.name for f in queryset.model._meta.concrete_fields
+                             if not isinstance(f, AutoField))
         else:
-            props = (f for f in values if isinstance(f, Prop))
-            meths = (f for f in values if isinstance(f, Meth))
-            fields = ("pk",) + tuple(f for f in values if not isinstance(f, (Prop, Meth)))
+            props = tuple(f for f in values if isinstance(f, Prop))
+            meths = tuple(f for f in values if isinstance(f, Meth))
+            cfields = tuple(f for f in values if isinstance(f, Field))
+            sfields = ("pk",)
+            sfields += tuple(f for f in values if isinstance(f, str))
+            sfields += tuple(f.name for f in cfields)
 
-        data = queryset.values(*fields)
+        # ensure iteration is deterministic or order_by was not already set
+        if len(queryset.query.order_by) == 0:
+            queryset = queryset.order_by("pk")
+
+        # concrete model fields can be extracted with one SQL query
+        data = queryset.values(*sfields)
         df = pd.DataFrame.from_records(data)
 
         if len(data) == 0:
@@ -99,20 +115,22 @@ class QDataFrame(pd.DataFrame, metaclass=QDataFrameMeta):
 
         df = df.set_index("pk")
 
-        for p in props:
-            df[p.name] = [getattr(inst, p.name) for inst in queryset]
+        for obj in cfields:
+            df = df.rename(columns={obj.name: obj.column_name})
+            df[obj.column_name] = obj.cast_to_dtype(df[obj.column_name], df.index)
 
-        for m in meths:
-            df[m.name] = [m.call(inst) for inst in queryset]
+        for obj in itertools.chain(props, meths):
+            new_column = [obj.value(inst) for inst in queryset]
+            df[obj.column_name] = obj.cast_to_dtype(new_column, df.index)
 
         if values is not None:
             df = df[list(map(str, values))]  # reorder the columns
 
-        setattr(df, "_ix", QiLocIndexer(df, "ix"))
+        setattr(df, "_ix", QIXIndexer(df, "ix"))
         setattr(df, "_iloc", QiLocIndexer(df, "iloc"))
-        setattr(df, "_loc", QiLocIndexer(df, "loc"))
-        setattr(df, "_iat", QiLocIndexer(df, "iat"))
-        setattr(df, "_at", QiLocIndexer(df, "at"))
+        setattr(df, "_loc", QLocIndexer(df, "loc"))
+        setattr(df, "_iat", QiAtIndexer(df, "iat"))
+        setattr(df, "_at", QAtIndexer(df, "at"))
 
         df._internal_names_set.add("_qs")
         df._qs = {inst.pk: inst for inst in queryset}
@@ -120,16 +138,18 @@ class QDataFrame(pd.DataFrame, metaclass=QDataFrameMeta):
 
         return df
 
-    def __init__(self, queryset: QuerySet = None, *args, **kwargs):
-        if (queryset is None) or not isinstance(queryset, QuerySet):
-            # only call __init__ when defaulting to non-queryset initialisation
+    def __init__(self, queryset: Optional[QuerySet] = None, *args, **kwargs):
+        # only call __init__ when defaulting to non-queryset initialisation
+        if queryset is None:
             super().__init__(*args, **kwargs)
+        elif not isinstance(queryset, QuerySet):
+            super().__init__(queryset, *args, **kwargs)
 
-    def _calc(self, func: Callable, fast: bool) -> Sequence:
+    def _calc(self, func: Callable, fast: bool) -> list:
         try:
             # calculate from existing columns
-            return self.apply(func, axis=1)
-        except:
+            return self.apply(func, axis=1).tolist()
+        except:  # noqa
             if fast:
                 raise
             try:
@@ -155,19 +175,22 @@ class QDataFrame(pd.DataFrame, metaclass=QDataFrameMeta):
         """
         if not self.empty:
             res = self._calc(func, fast)
-            if isinstance(res[0], dict):
-                df = pd.DataFrame(res, index=self.index)
+            if (len(res) > 0) and isinstance(res[0], dict):
+                df = pd.DataFrame.from_records(
+                    res, index=self.index, columns=res[0].keys()
+                )
                 self[df.columns] = df
             else:
                 self[func.__name__] = res
 
     def to_dataframe(self) -> pd.DataFrame:
         """ cast to an ordinary pandas.DataFrame """
+        # noinspection PyTypeChecker
         return super().copy()
 
-    def to_queryset(self) -> QuerySet:
-        """ cast to a queryset
-
-         This will only work if the index hasn't been reset
-        """
-        return self._qs.filter(pk__in=self.index)
+    def __getstate__(self) -> dict:
+        """ make QDataFrame pickle-able """
+        state = super().__getstate__()
+        if hasattr(self, "_qs"):
+            state["_qs"] = self._qs
+        return state
