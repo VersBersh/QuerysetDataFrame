@@ -7,10 +7,11 @@ A pandas DataFrame constructed from a django QuerySet.
 Initializing
 ----------------
 
-If you have a django model, `MyModel`, then you can quickly convert it to a dataframe with:
+If you have a django model, `MyModel`, then you can quickly convert it to a dataframe 
+with:
 
 ```python
-from querysetdataframe import QDataFrame
+from utilities.querysetdataframe import QDataFrame
 
 df = QDataFrame(MyModel.objects.all())
 ```
@@ -21,33 +22,44 @@ or you can specify the model fields you want as columns
 df = QDataFrame(MyModel.objects.all(), values=["field1", "field2", "fkey__field2"])
 ```
 
-you can also specify properties or methods on the model by using `Prop()` and `Meth()`
+you can also specify fields, properties or methods on the model by using `Field()`,
+`Prop()` and `Meth()`. Further, you can use the `column_name` parameter to rename 
+the columns in the returned dataframe, or the `dtype` to cast the column dtype
 
 ```python
-from querysetdataframe import Prop, Meth
+import datetime
+from utilities.querysetdataframe import QDataFrame
+from utilities.querysetdataframe import Field, Meth, Prop
 
 df = QDataFrame(
     MyModel.objects.all(),
     values=[
         "field1", 
         "field2", 
+        "fkey__field3",
+        Field("field4", column_name="new_name")
         Prop("property1"),
-        "fkey__field2",
-        Meth("method1", arg1, kwarg_name=kwarg_val)
+        Prop("property2.subproperty"),
+        Prop("fkey__field4", column_name="foobar")
+        Prop("datefield", dtype=datetime.date)
+        Meth("method1"),
+        Meth("method2", args=(arg1,), kwargs={"kwarg_name": kwarg_val})
     ]
 )
 ```
 
 And the column order will be as specified.
 
-note: if passing arguments via `Meth()` then the same arguments will be passed to the method for each instance (in the queryset). If you want the arguments to be dynamic then you should add the column as specified below
+note: if passing arguments via `Meth()` then the same arguments will be passed to the 
+method for each instance (in the queryset). If you want the arguments to be dynamic 
+then you should add the column as specified below
 
 
 Adding columns
 --------------
 
 You can quickly add a new column by defining a function that takes one parameter, an
- instance of MyModel, and return some value
+ instance of MyModel, and returns some value
 
 ```python
 from myapp.models import MyModel
